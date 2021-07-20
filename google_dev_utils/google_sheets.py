@@ -20,7 +20,7 @@ from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
-from google_drive import GoogleDrive
+from .google_drive import GoogleDrive
 
 class NoSheetFile(Exception):
     pass

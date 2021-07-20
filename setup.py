@@ -15,7 +15,8 @@ setup(name='google_dev_utils',
       packages=['google_dev_utils'],
       install_requires=[
           'google-api-python-client',
-          'google-auth-oauthlib'
+          'google-auth-oauthlib',
+          'errutils @ git+https://github.com/jasonmccsmith/errutils'
       ],
       include_package_data=True,
       zip_safe=False)
