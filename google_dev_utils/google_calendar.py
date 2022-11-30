@@ -3,6 +3,11 @@ Copyright Elemental Reasoning, LLC, 2019, 2020, 2021
 All rights reserved unless otherwise specified in licensing agreement.
 ---------------
 """
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
+import googleapiclient.discovery
+import datetime
 import sys
 import os
 import os.path
@@ -10,14 +15,7 @@ import argparse
 
 from errutils import erlogging
 logger = erlogging.setup(lambda depth: sys._getframe(depth))
-    
 
-import datetime
-
-import googleapiclient.discovery
-from google.oauth2 import service_account
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
 
 class GoogleCalendar(object):
     """Creates a channel to a google account's calendars.  The authenticated access is stored in self.service, and self.currentCal points to the actual calendar being accessed."""
@@ -27,6 +25,7 @@ class GoogleCalendar(object):
     # If currentCal is never set to another value, this should always still work
     currentCal = 'primary'
     colors = None
+
     def __init__(self, clientSecretFile, credentialsFile, userAccount):
         # Setup the Calendar API
         # To enable write-access if needed:
@@ -37,9 +36,10 @@ class GoogleCalendar(object):
         SCOPES = 'https://www.googleapis.com/auth/calendar.readonly'
 
         # Service Account Authorization, masquerades as omg-events@omg.org to get its calendars
-        credentials = service_account.Credentials.from_service_account_file(clientSecretFile, scopes=[SCOPES], subject=userAccount)
+        credentials = service_account.Credentials.from_service_account_file(
+            clientSecretFile, scopes=[SCOPES], subject=userAccount)
         self.service = googleapiclient.discovery.build('calendar', 'v3', credentials=credentials)
-        
+
         # # User Account Authorization.  Works to get all calendars, but *may* require a periodic authorization by logging into Google's auth request page with the omg-events@omg.org account.
         # creds = None
         # # The file token.pickle stores the user's access and refresh tokens, and is
@@ -64,11 +64,12 @@ class GoogleCalendar(object):
         """Return list of calendar descriptors"""
         cals = self.service.calendarList().list().execute().get('items', [])
         if only:
-            cals = [ c for c in cals if c['summary'] == only ]
+            cals = [c for c in cals if c['summary'] == only]
         return cals
-    
+
     def getCalendarObjectForCalendarNamed(self, calName):
-        cals = [ c for c in self.service.calendarList().list().execute().get('items', []) if c['summary'].lower() == calName.lower() ]
+        cals = [c for c in self.service.calendarList().list().execute().get(
+            'items', []) if c['summary'].lower() == calName.lower()]
         if len(cals) == 1:
             return cals[0]
         elif len(cals) > 1:
@@ -76,40 +77,44 @@ class GoogleCalendar(object):
         else:
             logger.error("Calendar named '%s' was not found" % (calName))
         return None
-        
+
     def getCalendarIDForCalendarNamed(self, calName):
         cal = self.getCalendarObjectForCalendarNamed(calName)
         if cal:
             return cal['id']
         return "NO-SUCH-CALENDAR"
-        
-    def getColorForCalendarNamed(self, calName):
+
+    def getColorForCal(self, cal):
         if self.colors == None:
             logger.info("Getting colors")
             self.colors = self.service.colors().get().execute()
-        cal = self.getCalendarObjectForCalendarNamed(calName)
         colId = cal['colorId']
         # print(colId)
         # print(self.colors['calendar'])
         if colId in self.colors['calendar']:
             return self.colors['calendar'][colId]['background']
         return "NO-SUCH-CALENDAR"
-        
+
+    def getColor(self):
+        return self.getColorForCal(self.currentCal)
+
+    def getColorForCalendarNamed(self, calName):
+        return self.getColorForCal(self.getCalendarObjectForCalendarNamed(calName))
+
     def getCanonicalCalendarName(self, calName):
         cal = self.getCalendarObjectForCalendarNamed(calName)
         if cal:
             return cal['summary']
         return "NO-SUCH-CALENDAR"
-        
-        
+
     def getNextNEvents(self, count):
         """Get the next 'count' events on the calendar, after current date and time"""
         # Call the Calendar API
         logger.info('Getting the upcoming %d events' % (count))
-        now = datetime.datetime.utcnow().isoformat() + 'Z' # 'Z' indicates UTC time
+        now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
         events_result = self.service.events().list(calendarId=self.currentCal, timeMin=now,
-                                              maxResults=count, singleEvents=True,
-                                              orderBy='startTime').execute()
+                                                   maxResults=count, singleEvents=True,
+                                                   orderBy='startTime').execute()
         logger.debug("events_result: %r" % (events_result))
         events = events_result.get('items', [])
 
@@ -118,7 +123,7 @@ class GoogleCalendar(object):
         else:
             logger.debug(events)
         return events
-    
+
     def getEventsInDateTimeRange(self, dateStart, dateEnd):
         """Get all events starting at dateStart, through dateEnd.
         dateStart and dateEnd are datetime.datetime objects, whose time is respected.
@@ -129,8 +134,8 @@ class GoogleCalendar(object):
         logger.debug('Getting the events from %r to %r' % (dateStart, dateEnd))
         logger.debug('Getting the events from %r to %r' % (dateStart.isoformat(), dateEnd.isoformat()))
         events_result = self.service.events().list(calendarId=self.currentCal, timeMin=dateStart.isoformat(),
-                                              timeMax=dateEnd.isoformat(), singleEvents=True,
-                                              orderBy='startTime', maxResults=250).execute()
+                                                   timeMax=dateEnd.isoformat(), singleEvents=True,
+                                                   orderBy='startTime', maxResults=250).execute()
         logger.debug("events_result: %r" % (events_result))
         events = events_result.get('items', [])
         if not events:
@@ -152,20 +157,23 @@ class GoogleCalendar(object):
         logger.debug('Getting the events from %r to %r' % (start, end))
         return self.getEventsInDateTimeRange(start.replace(hour=0, minute=0), end.replace(hour=23, minute=59))
 
+
 class GoogleCalendarMutable(GoogleCalendar):
     def __init__(self, clientSecretFile, credentialsFile, userAccount):
         SCOPES = 'https://www.googleapis.com/auth/calendar'
 
         # Service Account Authorization, masquerades as omg-events@omg.org to get its calendars
-        credentials = service_account.Credentials.from_service_account_file(clientSecretFile, scopes=[SCOPES], subject=userAccount)
+        credentials = service_account.Credentials.from_service_account_file(
+            clientSecretFile, scopes=[SCOPES], subject=userAccount)
         self.service = googleapiclient.discovery.build('calendar', 'v3', credentials=credentials)
-        
+
     def deleteEvent(self, eventID):
         results = self.service.events().delete(calendarId=self.currentCal, eventId=eventID).execute()
         return results
 
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description = 'Google Calendar Authenticator')
+    parser = argparse.ArgumentParser(description='Google Calendar Authenticator')
     # Debugging and testing
     parser.add_argument('--verbose', default=False, action='store_true')
     parser.add_argument('--debug', default=False, action='store_true')
@@ -176,4 +184,3 @@ if __name__ == '__main__':
         logger.setLevel(erlogging.INFO)
     if args.debug:
         logger.setLevel(erlogging.DEBUG)
-
